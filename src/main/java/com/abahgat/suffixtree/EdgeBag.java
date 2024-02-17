@@ -15,8 +15,11 @@
  */
 package com.abahgat.suffixtree;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -26,41 +29,58 @@ import java.util.Set;
  * Implements only the operations that are needed within the suffix tree context.
  */
 class EdgeBag implements Map<Character, Edge> {
-    private byte[] chars;
-    private Edge[] values;
+    private byte[][] chars;
+    private Edge[][] values;
     private static final int BSEARCH_THRESHOLD = 6;
+    private static final int UTF_16BE = 8;
 
     @Override
     public Edge put(Character character, Edge e) {
         char c = character.charValue();
-        if (c != (char) (byte) c) {
+        byte[] cBytes = getBytesFromChar(c);
+        byte cByte0 = cBytes[0];
+        byte cByte1 = cBytes[1];
+
+        if (!isLegalArgument(c, cBytes)) {
             throw new IllegalArgumentException("Illegal input character " + c + ".");
         }
         
         if (chars == null) {
-            chars = new byte[0];
-            values = new Edge[0];
+            chars = new byte[UTF_16BE][0];
+            values = new Edge[UTF_16BE][0];
         }
-        int idx = search(c);
+        
+        byte[] currentChars = chars[cByte0];
+        Edge[] currentValues = values[cByte0];        
+        if (currentChars == null) {
+            currentChars = new byte[0];
+            chars[cByte0] = currentChars;
+            currentValues = new Edge[0];
+            values[cByte0] = currentValues;
+        }
+
+        int idx = search(c, cBytes);
         Edge previous = null;
 
         if (idx < 0) {
-            int currsize = chars.length;
+            int currsize = currentChars.length;
             byte[] copy = new byte[currsize + 1];
-            System.arraycopy(chars, 0, copy, 0, currsize);
-            chars = copy;
+            System.arraycopy(currentChars, 0, copy, 0, currsize);
+            currentChars = copy;
+            chars[cByte0] = currentChars;
             Edge[] copy1 = new Edge[currsize + 1];
-            System.arraycopy(values, 0, copy1, 0, currsize);
-            values = copy1;
-            chars[currsize] = (byte) c;
-            values[currsize] = e;
+            System.arraycopy(currentValues, 0, copy1, 0, currsize);
+            currentValues = copy1;
+            values[cByte0] = currentValues;
+            currentChars[currsize] = cByte1;
+            currentValues[currsize] = e;
             currsize++;
             if (currsize > BSEARCH_THRESHOLD) {
-                sortArrays();
+                sortArrays(cByte0);
             }
         } else {
-            previous = values[idx];
-            values[idx] = e;
+            previous = currentValues[idx];
+            currentValues[idx] = e;
         }
         return previous;
     }
@@ -71,27 +91,41 @@ class EdgeBag implements Map<Character, Edge> {
     }
 
     public Edge get(char c) {
-        if (c != (char) (byte) c) {
+        byte[] cBytes = getBytesFromChar(c);
+        if (!isLegalArgument(c, cBytes)) {
             throw new IllegalArgumentException("Illegal input character " + c + ".");
         }
         
-        int idx = search(c);
+        int idx = search(c, cBytes);
         if (idx < 0) {
             return null;
         }
-        return values[idx];
+        return values[cBytes[0]][idx];
     }
 
-    private int search(char c) {
+    private byte[] getBytesFromChar(char c) {
+        return String.valueOf(c).getBytes(StandardCharsets.UTF_16BE);
+    }
+
+    private char getCharFromBytes(byte[] bytes) {
+        return new String(bytes, StandardCharsets.UTF_16BE).charAt(0);
+    }
+
+    private boolean isLegalArgument(char c, byte[] cBytes) {
+        return cBytes.length == 2 || getCharFromBytes(cBytes) == c;
+    }
+
+    private int search(char c, byte[] bytes) {
         if (chars == null)
             return -1;
         
-        if (chars.length > BSEARCH_THRESHOLD) {
-            return java.util.Arrays.binarySearch(chars, (byte) c);
+        byte[] currentChars = chars[bytes[0]];
+        if (currentChars.length > BSEARCH_THRESHOLD) {
+            return java.util.Arrays.binarySearch(currentChars, bytes[1]);
         }
 
-        for (int i = 0; i < chars.length; i++) {
-            if (c == chars[i]) {
+        for (int i = 0; i < currentChars.length; i++) {
+            if (c == currentChars[i]) {
                 return i;
             }
         }
@@ -100,7 +134,18 @@ class EdgeBag implements Map<Character, Edge> {
 
     @Override
     public Collection<Edge> values() {
-        return Arrays.asList(values == null ? new Edge[0] : values);
+        if (values == null) {
+            return Arrays.asList(new Edge[0]);
+        }
+        List<Edge> allValues = new ArrayList<Edge>();
+        for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+                for (int j = 0; j < values[i].length; j++) {
+                    allValues.add(values[i][j]);
+                }
+            }
+        }
+        return allValues;
     }
     
     /**
@@ -108,17 +153,19 @@ class EdgeBag implements Map<Character, Edge> {
      * 
      * It was preferred to faster sorts (like qsort) because of the small sizes (<=36) of the collections involved.
      */
-    private void sortArrays() {
-        for (int i = 0; i < chars.length; i++) {
+    private void sortArrays(int idx) {
+        byte[] currentChars = chars[idx];
+        Edge[] currentValues = values[idx];
+        for (int i = 0; i < currentChars.length; i++) {
          for (int j = i; j > 0; j--) {
-            if (chars[j-1] > chars[j]) {
-               byte swap = chars[j];
-               chars[j] = chars[j-1];
-               chars[j-1] = swap;
+            if (currentChars[j-1] > currentChars[j]) {
+               byte swap = currentChars[j];
+               currentChars[j] = currentChars[j-1];
+               currentChars[j-1] = swap;
 
-               Edge swapEdge = values[j];
-               values[j] = values[j-1];
-               values[j-1] = swapEdge;
+               Edge swapEdge = currentValues[j];
+               currentValues[j] = currentValues[j-1];
+               currentValues[j-1] = swapEdge;
             }
          }
       }
@@ -126,12 +173,19 @@ class EdgeBag implements Map<Character, Edge> {
     
     @Override
     public boolean isEmpty() {
-        return chars == null || chars.length == 0;
+        return chars == null || chars.length == 0 || chars[0].length == 0;
     }
     
     @Override
     public int size() {
-        return chars == null ? 0 : chars.length;
+        if (chars == null) {
+            return 0;
+        }
+        int size = 0;
+        for (int i = 0; i < chars.length; i++) {
+            size += chars[i].length;
+        }
+        return size;
     }
     
     @Override
