@@ -15,6 +15,7 @@
  */
 package com.abahgat.suffixtree;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Collections;
 
@@ -66,6 +67,56 @@ public class GeneralizedSuffixTree {
      * The last leaf that was added during the update operation
      */
     private Node activeLeaf = root;
+
+    /**
+     * The end symbol that must be added to the end of every string that is added to the GST
+     */
+    private char endSymbol = '$';
+
+    /**
+     * The start symbol that must be added to the start of every string that is added to the GST
+     */
+    private char startSymbol = '^';
+
+    /**
+     * Searches for the word that starts the string
+     * @param word the key that starts the string
+     * @return the collection of indexes associated with the input <tt>word</tt>
+     */
+    public Collection<Integer> startsWith(String word) {
+        if (word == null || word.isEmpty()) {
+            return Collections.EMPTY_LIST;
+        }
+        String searchKey = startSymbol + word;
+        return this.search(searchKey);
+    }
+
+
+    /**
+     * Searches for the word that ends the string
+     * @param word the key that ends the string
+     * @return the collection of indexes associated with the input <tt>word</tt>
+     */
+    public Collection<Integer> endsWith(String word) {
+        if (word == null || word.isEmpty()) {
+            return Collections.EMPTY_LIST;
+        }
+        String searchKey = word + endSymbol;
+        return this.search(searchKey);
+    }
+
+    /**
+     * Searches for the word within the GST.
+     * @param word the word to search for
+     * @return the collection of indexes associated with the input <tt>word</tt>
+     */
+    public Collection<Integer> searchWord(String word) {
+        if (word == null || word.isEmpty()) {
+            return Collections.EMPTY_LIST;
+        }
+        String keyString = startSymbol + word + endSymbol;
+        return this.search(keyString);
+    }
 
     /**
      * Searches for the given word within the GST.
@@ -172,7 +223,7 @@ public class GeneralizedSuffixTree {
         // reset activeLeaf
         activeLeaf = root;
 
-        String remainder = key;
+        String remainder = startSymbol + key + endSymbol;
         Node s = root;
 
         // proceed with tree construction (closely related to procedure in
